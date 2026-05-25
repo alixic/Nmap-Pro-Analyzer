@@ -3,7 +3,7 @@
 
 # Nmap Analyzer Pro
 
-Denumire proiect in cadrul materiei: g2p17_RezultateNmap
+<br>Denumire proiect in cadrul materiei: g2p17_RezultateNmap <br/>
 Aplicație web pentru vizualizarea rezultatelor scanărilor Nmap în format XML.
 
 ## Funcționalități
