@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nmap Pro Visualizer</title>
+    <style>
+        :root {
+            --primary: #0f172a;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --text-main: #334155;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        /* Header & Stats */
+        .scan-meta {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            display: none;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+        }
+
+        /* Upload Area (Drag & Drop) */
+        #upload-zone {
+            border: 3px dashed #cbd5e1;
+            background: var(--card);
+            padding: 60px;
+            text-align: center;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        #upload-zone:hover, #upload-zone.dragover { 
+            border-color: var(--accent); 
+            background: #e0f2fe; 
+        }
+
+        /* Dashboard Elements */
+        .controls {
+            display: flex; gap: 15px; margin-bottom: 20px; align-items: center;
+        }
+        input[type="text"] {
+            flex-grow: 1; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+        }
+
+        /* Tables */
+        .table-container {
+            background: var(--card);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; padding: 15px; text-align: left; font-size: 0.85rem; text-transform: uppercase; color: #64748b; }
+        td { padding: 15px; border-top: 1px solid #f1f5f9; }
+
+        /* Pagination Controls */
+        .pagination {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 15px; background: var(--card); border-top: 1px solid #f1f5f9;
+        }
+        .pagination button {
+            padding: 8px 16px; border: 1px solid #cbd5e1; background: white; 
+            border-radius: 6px; cursor: pointer; transition: 0.2s;
+        }
+        .pagination button:hover:not(:disabled) { background: #f8fafc; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Badges */
+        .badge {
+            padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+        }
+        .bg-up { background: #dcfce7; color: #166534; }
+        .bg-open { background: #dcfce7; color: #166534; border: 1px solid #166534; }
+        .bg-filtered { background: #fef3c7; color: #92400e; }
+        .bg-closed { background: #fee2e2; color: #991b1b; }
+        .bg-down { background: #fee2e2; color: #991b1b; }
+
+        /* Modal Customization */
+        #details-modal {
+            display: none; position: fixed; inset: 0; background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-body {
+            background: white; width: 90%; max-width: 900px; max-height: 85vh;
+            border-radius: 16px; padding: 30px; overflow-y: auto; position: relative;
+        }
+        .close-btn { position: absolute; right: 20px; top: 20px; font-size: 24px; cursor: pointer; }
+        
+        /* Loading Overlay */
+        #loader {
+            display: none; position: fixed; inset: 0; background: rgba(255,255,255,0.8);
+            z-index: 999; align-items: center; justify-content: center; flex-direction: column;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3; border-top: 4px solid var(--accent);
+            border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="loader">
+    <div class="spinner"></div>
+    <h3 style="margin-top: 15px; color: var(--primary);">Procesăm fișierul XML...</h3>
+</div>
+
+<div class="container">
+    <header style="margin-bottom: 30px;">
+        <h1 style="margin:0; color: var(--primary);">Nmap Analyzer Pro</h1>
+        <p style="color: #64748b;">Analiză structurată pentru securitatea rețelei tale</p>
+    </header>
+
+    <div id="scanInfo" class="scan-meta">
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+            <div><strong>Utilitar:</strong> <span id="nmapVer">-</span></div>
+            <div><strong>Comandă:</strong> <code id="nmapArgs" style="font-size: 0.8rem;">-</code></div>
+            <div><strong>Data:</strong> <span id="scanDate">-</span></div>
+        </div>
+    </div>
+
+    <div id="upload-zone">
+        <img src="https://cdn-icons-png.flaticon.com/512/8242/8242984.png" width="60" alt="upload" style="margin-bottom: 15px; opacity: 0.5;">
+        <h3>Trage fișierul XML aici sau dă click </h3>
+        <p>Procesare 100% locală prin Web Workers (suportă fișiere de până la 50MB) </p>
+        <input type="file" id="fileInput" accept=".xml" hidden>
+    </div>
+
+    <div id="dashboard" style="display:none;">
+        <div class="controls">
+            <input type="text" id="searchBox" placeholder="Cautare dupa: IP, Hostname & Manufacturer">
+            <button onclick="location.reload()" style="padding: 12px 20px; border-radius: 8px; cursor: pointer; background: white; border: 1px solid #cbd5e1;">Fișier Nou</button>
+        </div>
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Dispozitiv / IP</th>
+                        <th>Status</th>
+                        <th>MAC / Vendor</th>
+                        <th>Sistem Operare</th>
+                        <th>Porturi</th>
+                        <th>Acțiuni</th>
+                    </tr>
+                </thead>
+                <tbody id="hostsBody"></tbody>
+            </table>
+            
+            <div class="pagination">
+                <button id="btnPrev" onclick="changePage(-1)">Inapoi</button>
+                <span id="pageIndicator" style="font-size: 0.85rem; font-weight: 600;">Pagina 1</span>
+                <button id="btnNext" onclick="changePage(1)">Urmatoarea</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="details-modal">
+    <div class="modal-body">
+        <span class="close-btn" onclick="closeModal()">&times;</span>
+        <h2 id="modalTitle" style="margin-top: 0; color: var(--primary);"></h2>
+        <div id="hostDetailsSummary" style="margin-bottom: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f8fafc; padding: 15px; border-radius: 8px;"></div>
+        
+        <h3>Servicii Detectate</h3>
+        <table id="portsTable">
+            <thead>
+                <tr>
+                    <th>Port</th>
+                    <th>Protocol</th>
+                    <th>Stare</th>
+                    <th>Serviciu</th>
+                    <th>Versiune Detaliată</th>
+                </tr>
+            </thead>
+            <tbody id="portsBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    let allHosts = [];
+    let filteredHosts = [];
+    let currentPage = 1;
+    const itemsPerPage = 20; 
+
+    
+    const dropZone = document.getElementById('upload-zone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    function handleFile(file) {
+        document.getElementById('loader').style.display = 'flex';
+        const reader = new FileReader();
+        reader.onload = (e) => parseWithWorker(e.target.result);
+        reader.readAsText(file);
+    }
+
+    
+    const workerCode = `
+        self.onmessage = function(e) {
+            const xml = e.data;
+            if (!xml.includes('<nmaprun')) {
+                self.postMessage({ error: "Format invalid. Vă rugăm să încărcați un fișier XML valid." });
+                return;
+            }
+
+            const scanInfo = {
+                version: (xml.match(/<nmaprun[^>]*version="([^"]+)"/) || [])[1] || "-",
+                args: (xml.match(/<nmaprun[^>]*args="([^"]+)"/) || [])[1] || "-",
+                date: (xml.match(/<nmaprun[^>]*startstr="([^"]+)"/) || [])[1] || "-"
+            };
+
+            const hosts = [];
+            const hostRegex = /<host[\\s\\S]*?<\\/host>/g;
+            let hostMatch;
+
+            while ((hostMatch = hostRegex.exec(xml)) !== null) {
+                const hXml = hostMatch[0];
+                const ip = (hXml.match(/<address[^>]*addr="([^"]+)"[^>]*addrtype="ipv4"/) || hXml.match(/<address[^>]*addr="([^"]+)"/) || [])[1] || "Unknown";
+                
+                
+                let macAddr = "N/A";
+                let macVendor = "Generic";
+                
+                
+                const macTagMatch = hXml.match(/<address[^>]*addrtype="mac"[^>]*>/);
+                
+                if (macTagMatch) {
+                    const macTag = macTagMatch[0];
+                    const addrMatch = macTag.match(/addr="([^"]+)"/);
+                    if (addrMatch) macAddr = addrMatch[1];
+                    
+                    const vendorMatch = macTag.match(/vendor="([^"]+)"/);
+                    if (vendorMatch) macVendor = vendorMatch[1];
+                }
+                
+                const hostData = {
+                    ip: ip,
+                    mac: macAddr,
+                    vendor: macVendor,
+                    hostname: (hXml.match(/<hostname[^>]*name="([^"]+)"/) || [])[1] || "",
+                    status: (hXml.match(/<status[^>]*state="([^"]+)"/) || [])[1] || "unknown",
+                    os: (hXml.match(/<osmatch[^>]*name="([^"]+)"/) || [])[1] || "Nedetectat",
+                    ports: []
+                };
+
+                const portRegex = /<port [\\s\\S]*?<\\/port>/g;
+                let portMatch;
+                while ((portMatch = portRegex.exec(hXml)) !== null) {
+                    const pXml = portMatch[0];
+                    const sProduct = (pXml.match(/<service[^>]*product="([^"]+)"/) || [])[1] || '';
+                    const sVersion = (pXml.match(/<service[^>]*version="([^"]+)"/) || [])[1] || '';
+                    const vCombined = \`\${sProduct} \${sVersion}\`.trim() || "Necunoscut";
+
+                    hostData.ports.push({
+                        id: (pXml.match(/portid="([^"]+)"/) || [])[1],
+                        proto: (pXml.match(/protocol="([^"]+)"/) || [])[1],
+                        state: (pXml.match(/<state[^>]*state="([^"]+)"/) || [])[1],
+                        service: (pXml.match(/<service[^>]*name="([^"]+)"/) || [])[1] || 'unknown',
+                        version: vCombined
+                    });
+                }
+                hosts.push(hostData);
+            }
+            self.postMessage({ scanInfo, hosts });
+        };
+    `;
+
+    function parseWithWorker(xmlString) {
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+
+        worker.onmessage = function(e) {
+            document.getElementById('loader').style.display = 'none';
+            if (e.data.error) {
+                alert(e.data.error);
+                return;
+            }
+
+           
+            document.getElementById('nmapVer').innerText = e.data.scanInfo.version;
+            document.getElementById('nmapArgs').innerText = e.data.scanInfo.args;
+            document.getElementById('scanDate').innerText = e.data.scanInfo.date;
+            document.getElementById('scanInfo').style.display = 'block';
+
+            allHosts = e.data.hosts;
+            filteredHosts = [...allHosts];
+            
+            document.getElementById('upload-zone').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            
+            currentPage = 1;
+            renderPage();
+        };
+
+        worker.postMessage(xmlString);
+    }
+
+    
+    function renderPage() {
+        const body = document.getElementById('hostsBody');
+        body.innerHTML = '';
+
+         
+        if (filteredHosts.length === 0) {
+            body.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 40px; font-weight: bold; color: var(--danger);">Niciun host găsit.</td></tr>`;
+            updatePaginationControls(0);
+            return;
+        }
+
+        const totalPages = Math.ceil(filteredHosts.length / itemsPerPage);
+        const start = (currentPage - 1) * itemsPerPage;
+        const end = start + itemsPerPage;
+        const pageData = filteredHosts.slice(start, end);
+
+        pageData.forEach(h => {
+            const openCount = h.ports.filter(p => p.state === 'open').length;
+            // Mapăm indexul real din allHosts pentru deschiderea modalului
+            const realIndex = allHosts.findIndex(ah => ah.ip === h.ip); 
+            
+            body.innerHTML += `
+                <tr>
+                    <td>
+                        <div style="font-weight: 700;">${h.ip}</div>
+                        <div style="font-size: 0.75rem; color: #64748b;">${h.hostname}</div>
+                    </td>
+                    <td><span class="badge bg-${h.status}">${h.status.toUpperCase()}</span></td>
+                    <td>
+                        <div style="font-size: 0.85rem;">${h.mac}</div>
+                        <div style="font-size: 0.7rem; color: var(--accent);">${h.vendor}</div>
+                    </td>
+                    <td style="font-size: 0.85rem;">${h.os}</td>
+                    <td><span style="font-weight: 600;">${openCount}</span> deschise</td>
+                    <td><button onclick="showDetails(${realIndex})" style="cursor:pointer; background: var(--accent); color: white; border:none; padding: 6px 12px; border-radius: 6px;">Detalii</button></td>
+                </tr>
+            `;
+        });
+
+        updatePaginationControls(totalPages);
+    }
+
+    function changePage(direction) {
+        currentPage += direction;
+        renderPage();
+    }
+
+    function updatePaginationControls(totalPages) {
+        document.getElementById('pageIndicator').innerText = totalPages === 0 ? 'Pagina 0 din 0' : `Pagina ${currentPage} din ${totalPages}`;
+        document.getElementById('btnPrev').disabled = currentPage <= 1;
+        document.getElementById('btnNext').disabled = currentPage >= totalPages;
+    }
+
+    // Funcționalitate de căutare
+    document.getElementById('searchBox').addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        filteredHosts = allHosts.filter(h => 
+            h.ip.includes(query) || 
+            h.hostname.toLowerCase().includes(query) || 
+            h.vendor.toLowerCase().includes(query)
+        );
+        currentPage = 1;
+        renderPage();
+    });
+
+    // Detalii Host (Modal)
+    function showDetails(idx) {
+        const h = allHosts[idx];
+        document.getElementById('modalTitle').innerText = `Analiză Detaliată: ${h.ip}`;
+        document.getElementById('hostDetailsSummary').innerHTML = `
+            <div><strong>Vendor:</strong> ${h.vendor}</div>
+            <div><strong>OS:</strong> ${h.os}</div>
+            <div><strong>Hostname:</strong> ${h.hostname || 'N/A'}</div>
+            <div><strong>Total Porturi Scanate:</strong> ${h.ports.length}</div>
+        `;
+
+        const pBody = document.getElementById('portsBody');
+        pBody.innerHTML = h.ports.length === 0 
+            ? '<tr><td colspan="5" style="text-align:center;">Niciun port scanat/detectat.</td></tr>' 
+            : h.ports.map(p => `
+            <tr>
+                <td><strong>${p.id}</strong></td>
+                <td>${p.proto.toUpperCase()}</td>
+                <td><span class="badge bg-${p.state}">${p.state}</span></td>
+                <td>${p.service}</td>
+                <td style="font-size: 0.8rem; color: #475569;">${p.version}</td>
+            </tr>
+        `).join('');
+
+        document.getElementById('details-modal').style.display = 'flex';
+    }
+
+    function closeModal() { document.getElementById('details-modal').style.display = 'none'; }
+</script>
+</body>
+</html>
